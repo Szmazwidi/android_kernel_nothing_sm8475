@@ -145,6 +145,7 @@ enum {
 	UFSHCD_STATE_EH_SCHEDULED_NON_FATAL,
 };
 
+static bool system_suspending;
 
 
 /* UFSHCD UIC layer error flags */
@@ -9050,6 +9051,7 @@ int ufshcd_system_suspend(struct ufs_hba *hba)
 	ktime_t start = ktime_get();
 
 	down(&hba->host_sem);
+	system_suspending = true;
 
 	if (!hba->is_powered)
 		return 0;
@@ -9117,6 +9119,7 @@ out:
 		hba->curr_dev_pwr_mode, hba->uic_link_state);
 	if (!ret)
 		hba->is_sys_suspended = false;
+	system_suspending = false;
 	up(&hba->host_sem);
 	return ret;
 }
