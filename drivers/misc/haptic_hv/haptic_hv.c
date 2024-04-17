@@ -21,7 +21,6 @@
 #include <asm/cpufeature.h>
 
 #include "haptic_hv.h"
-#include "haptic_hv_reg.h"
 
 #ifdef AAC_RICHTAP_SUPPORT
 #include <linux/device.h>
