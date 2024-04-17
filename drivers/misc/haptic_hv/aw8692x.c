@@ -424,7 +424,7 @@ static void aw8692x_upload_lra(struct aw_haptic *aw_haptic, uint32_t flag)
 			    AW8692X_BIT_ANACFG20_TRIM_LRA;
 		break;
 	default:
-		aw_err("error param, write f0_cali_data to trim_lra!");
+		aw_dbg("error param, write f0_cali_data to trim_lra!");
 		cali_data = (char)aw_haptic->f0_cali_data &
 			    AW8692X_BIT_ANACFG20_TRIM_LRA;
 		break;
