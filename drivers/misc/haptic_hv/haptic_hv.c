@@ -1121,7 +1121,7 @@ static int wait_enter_rtp_mode(struct aw_haptic *aw_haptic)
 			break;
 		}
 		cnt--;
-		aw_info("wait for RTP_GO, glb_state=0x%02X", ret);
+		aw_dbg("wait for RTP_GO, glb_state=0x%02X", ret);
 		usleep_range(2000, 2500);
 	}
 	if (!rtp_work_flag) {
