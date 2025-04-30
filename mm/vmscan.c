@@ -4203,8 +4203,13 @@ int kswapd_run(int nid)
 	if (pgdat->kswapd)
 		return 0;
 
-	if (kswapd_threads > 1)
-		return kswapd_per_node_run(nid);
+	kcompressd_run(nid);
+	if (kswapd_threads > 1) {
+		ret = kswapd_per_node_run(nid);
+		if (ret)
+			kcompressd_stop(nid);
+		return ret;
+	}
 
 	pgdat->kswapd = kthread_run(kswapd, pgdat, "kswapd%d", nid);
 	if (IS_ERR(pgdat->kswapd)) {
@@ -4213,6 +4218,7 @@ int kswapd_run(int nid)
 		pr_err("Failed to start kswapd on node %d\n", nid);
 		ret = PTR_ERR(pgdat->kswapd);
 		pgdat->kswapd = NULL;
+		kcompressd_stop(nid);
 	}
 	return ret;
 }
@@ -4227,6 +4233,7 @@ void kswapd_stop(int nid)
 
 	if (kswapd_threads > 1) {
 		kswapd_per_node_stop(nid);
+		kcompressd_stop(nid);
 		return;
 	}
 
@@ -4234,6 +4241,7 @@ void kswapd_stop(int nid)
 		kthread_stop(kswapd);
 		NODE_DATA(nid)->kswapd = NULL;
 	}
+	kcompressd_stop(nid);
 }
 
 static int __init kswapd_init(void)
