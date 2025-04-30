@@ -25,6 +25,8 @@
 #include <linux/psi.h>
 #include <linux/uio.h>
 #include <linux/sched/task.h>
+#include <linux/sched/mm.h>
+#include <linux/kthread.h>
 #include <trace/hooks/mm.h>
 
 static struct bio *get_swap_bio(gfp_t gfp_flags,
@@ -192,6 +194,124 @@ bad_bmap:
 	goto out;
 }
 
+#ifdef CONFIG_KCOMPRESSD
+#define KCOMPRESS_FIFO_PAGES 256
+
+static bool swap_sched_async_compress(struct page *page)
+{
+	pg_data_t *pgdat = page_pgdat(page);
+	struct swap_info_struct *sis;
+	unsigned long flags;
+	bool queued = false;
+
+	if (!current_is_kswapd() || !PageAnon(page) || PageTransHuge(page))
+		return false;
+	sis = page_swap_info(page);
+	/* Other swap flags can change; only the stable I/O capability matters. */
+	if (!(data_race(sis->flags) & SWP_SYNCHRONOUS_IO))
+		return false;
+
+	/* Multiple kswapd threads may enqueue pages for the same node. */
+	spin_lock_irqsave(&pgdat->kcompress_lock, flags);
+	if (pgdat->kcompress_accepting &&
+	    kfifo_avail(&pgdat->kcompress_fifo) >= sizeof(page)) {
+		get_page(page);
+		kfifo_in(&pgdat->kcompress_fifo, &page, sizeof(page));
+		queued = true;
+	}
+	spin_unlock_irqrestore(&pgdat->kcompress_lock, flags);
+	if (queued)
+		wake_up(&pgdat->kcompressd_wait);
+	return queued;
+}
+
+static int kcompressd(void *arg)
+{
+	pg_data_t *pgdat = arg;
+	struct page *page;
+	unsigned long flags;
+	unsigned int noreclaim = memalloc_noreclaim_save();
+	struct writeback_control wbc = {
+		.sync_mode = WB_SYNC_NONE,
+		.nr_to_write = SWAP_CLUSTER_MAX,
+		.range_start = 0,
+		.range_end = LLONG_MAX,
+		.for_reclaim = 1,
+	};
+
+	current->flags |= PF_SWAPWRITE;
+	for (;;) {
+		wait_event(pgdat->kcompressd_wait, kthread_should_stop() ||
+			   !kfifo_is_empty(&pgdat->kcompress_fifo));
+		for (;;) {
+			unsigned int copied;
+
+			spin_lock_irqsave(&pgdat->kcompress_lock, flags);
+			copied = kfifo_out(&pgdat->kcompress_fifo, &page,
+					   sizeof(page));
+			spin_unlock_irqrestore(&pgdat->kcompress_lock, flags);
+			if (!copied)
+				break;
+			/* The producer hands over a locked swap-cache page. */
+			__swap_writepage(page, &wbc, end_swap_bio_write);
+			put_page(page);
+			cond_resched();
+		}
+		/* Stop closes admission first, so this also drains the queue. */
+		if (kthread_should_stop())
+			break;
+	}
+	memalloc_noreclaim_restore(noreclaim);
+	return 0;
+}
+
+void kcompressd_run(int nid)
+{
+	pg_data_t *pgdat = NODE_DATA(nid);
+	struct task_struct *task;
+	unsigned long flags;
+
+	if (pgdat->kcompressd)
+		return;
+	if (kfifo_alloc(&pgdat->kcompress_fifo,
+		       KCOMPRESS_FIFO_PAGES * sizeof(struct page *), GFP_KERNEL)) {
+		pr_warn("kcompressd%d: queue allocation failed; using sync swap\n", nid);
+		return;
+	}
+	task = kthread_create_on_node(kcompressd, pgdat, nid, "kcompressd%d", nid);
+	if (IS_ERR(task)) {
+		pr_warn("kcompressd%d: worker creation failed (%ld)\n", nid, PTR_ERR(task));
+		kfifo_free(&pgdat->kcompress_fifo);
+		return;
+	}
+	pgdat->kcompressd = task;
+	spin_lock_irqsave(&pgdat->kcompress_lock, flags);
+	pgdat->kcompress_accepting = true;
+	spin_unlock_irqrestore(&pgdat->kcompress_lock, flags);
+	wake_up_process(task);
+}
+
+void kcompressd_stop(int nid)
+{
+	pg_data_t *pgdat = NODE_DATA(nid);
+	unsigned long flags;
+
+	if (!pgdat->kcompressd)
+		return;
+	spin_lock_irqsave(&pgdat->kcompress_lock, flags);
+	pgdat->kcompress_accepting = false;
+	spin_unlock_irqrestore(&pgdat->kcompress_lock, flags);
+	kthread_stop(pgdat->kcompressd);
+	pgdat->kcompressd = NULL;
+	kfifo_free(&pgdat->kcompress_fifo);
+}
+#else
+static bool swap_sched_async_compress(struct page *page)
+{
+	return false;
+}
+#endif
+
 /*
  * We may have stale swap cache pages in memory: notice
  * them here and get rid of the unnecessary final write.
@@ -220,6 +340,8 @@ int swap_writepage(struct page *page, struct writeback_control *wbc)
 		end_page_writeback(page);
 		goto out;
 	}
+	if (swap_sched_async_compress(page))
+		return 0;
 	ret = __swap_writepage(page, wbc, end_swap_bio_write);
 out:
 	return ret;

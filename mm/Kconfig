@@ -544,6 +544,16 @@ config MEM_SOFT_DIRTY
 
 	  See Documentation/admin-guide/mm/soft-dirty.rst for more details.
 
+config KCOMPRESSD
+	bool "Asynchronous compressed swap writeout (EXPERIMENTAL)"
+	depends on SWAP && (ZRAM != n)
+	default n
+	help
+	  Offload synchronous swap writes from kswapd to a bounded per-node
+	  worker queue. Full queues fall back to normal synchronous writeout.
+	  This experimental backport needs memory-pressure and suspend testing
+	  with the selected zram backend before enabling it in a device config.
+
 config ZSWAP
 	bool "Compressed cache for swap pages (EXPERIMENTAL)"
 	depends on FRONTSWAP && CRYPTO=y

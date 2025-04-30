@@ -396,6 +396,14 @@ extern void check_move_unevictable_pages(struct pagevec *pvec);
 extern int kswapd_run(int nid);
 extern void kswapd_stop(int nid);
 
+#ifdef CONFIG_KCOMPRESSD
+void kcompressd_run(int nid);
+void kcompressd_stop(int nid);
+#else
+static inline void kcompressd_run(int nid) { }
+static inline void kcompressd_stop(int nid) { }
+#endif
+
 #ifdef CONFIG_SWAP
 
 #include <linux/blk_types.h> /* for bio_end_io_t */
