@@ -236,6 +236,12 @@ static int bt_power_src_status[BT_POWER_SRC_SIZE];
 static struct btpower_platform_data *bt_power_pdata;
 static bool previous;
 static int pwr_state;
+
+int btpower_get_power_state(void)
+{
+	return READ_ONCE(pwr_state);
+}
+EXPORT_SYMBOL_GPL(btpower_get_power_state);
 static struct class *bt_class;
 static int bt_major;
 static int soc_id;
