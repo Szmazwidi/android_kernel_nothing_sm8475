@@ -5230,16 +5230,18 @@ EXPORT_SYMBOL_GPL(ufshcd_release_scsi_cmd);
  * __ufshcd_transfer_req_compl - handle SCSI and query command completion
  * @hba: per adapter instance
  * @completed_reqs: requests to complete
+ * @claimed: requests already removed from outstanding_reqs by the caller
  */
 static void __ufshcd_transfer_req_compl(struct ufs_hba *hba,
-					unsigned long completed_reqs)
+					unsigned long completed_reqs, bool claimed)
 {
 	struct ufshcd_lrb *lrbp;
 	struct scsi_cmnd *cmd;
 	int index;
 
 	for_each_set_bit(index, &completed_reqs, hba->nutrs) {
-		if (!test_and_clear_bit(index, &hba->outstanding_reqs))
+		if (!claimed &&
+		    !test_and_clear_bit(index, &hba->outstanding_reqs))
 			continue;
 		lrbp = &hba->lrb[index];
 		lrbp->compl_time_stamp = ktime_get();
@@ -5309,12 +5311,12 @@ static irqreturn_t ufshcd_trc_handler(struct ufs_hba *hba, bool use_utrlcnr)
 
 		spin_lock_irqsave(hba->host->host_lock, flags);
 		tr_doorbell = ufshcd_readl(hba, REG_UTP_TRANSFER_REQ_DOOR_BELL);
-		completed_reqs = tr_doorbell ^ hba->outstanding_reqs;
+		completed_reqs = ~tr_doorbell & hba->outstanding_reqs;
 		spin_unlock_irqrestore(hba->host->host_lock, flags);
 	}
 
 	if (completed_reqs) {
-		__ufshcd_transfer_req_compl(hba, completed_reqs);
+		__ufshcd_transfer_req_compl(hba, completed_reqs, false);
 		return IRQ_HANDLED;
 	} else {
 		return IRQ_NONE;
@@ -6861,25 +6863,27 @@ static int ufshcd_eh_device_reset_handler(struct scsi_cmnd *cmd)
 		goto out;
 	}
 
-	/* clear the commands that were pending for corresponding LUN */
+	/* Claim this LUN's requests against the atomic completion path. */
 	spin_lock_irqsave(hba->host->host_lock, flags);
 	for_each_set_bit(pos, &hba->outstanding_reqs, hba->nutrs)
-		if (hba->lrb[pos].lun == lun)
+		if (hba->lrb[pos].lun == lun &&
+		    test_and_clear_bit(pos, &hba->outstanding_reqs))
 			__set_bit(pos, &pending_reqs);
-	hba->outstanding_reqs &= ~pending_reqs;
 	spin_unlock_irqrestore(hba->host->host_lock, flags);
 
-	if (ufshcd_clear_cmds(hba, pending_reqs) < 0) {
+	err = ufshcd_clear_cmds(hba, pending_reqs);
+	if (err < 0) {
 		spin_lock_irqsave(hba->host->host_lock, flags);
 		not_cleared = pending_reqs &
 			ufshcd_readl(hba, REG_UTP_TRANSFER_REQ_DOOR_BELL);
-		hba->outstanding_reqs |= not_cleared;
+		for_each_set_bit(pos, &not_cleared, hba->nutrs)
+			set_bit(pos, &hba->outstanding_reqs);
 		spin_unlock_irqrestore(hba->host->host_lock, flags);
 
 		dev_err(hba->dev, "%s: failed to clear requests %#lx\n",
 			__func__, not_cleared);
 	}
-	__ufshcd_transfer_req_compl(hba, pending_reqs & ~not_cleared);
+	__ufshcd_transfer_req_compl(hba, pending_reqs & ~not_cleared, true);
 
 out:
 	hba->req_abort_count = 0;
@@ -7049,7 +7053,7 @@ static int ufshcd_abort(struct scsi_cmnd *cmd)
 		dev_err(hba->dev,
 		"%s: cmd was completed, but without a notifying intr, tag = %d",
 		__func__, tag);
-		__ufshcd_transfer_req_compl(hba, 1UL << tag);
+		__ufshcd_transfer_req_compl(hba, 1UL << tag, false);
 		goto release;
 	}
 
@@ -7090,7 +7094,7 @@ static int ufshcd_abort(struct scsi_cmnd *cmd)
 	 * has been aborted successfully.
 	 */
 	spin_lock_irqsave(host->host_lock, flags);
-	outstanding = __test_and_clear_bit(tag, &hba->outstanding_reqs);
+	outstanding = test_and_clear_bit(tag, &hba->outstanding_reqs);
 	spin_unlock_irqrestore(host->host_lock, flags);
 
 	if (outstanding) {
