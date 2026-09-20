@@ -322,6 +322,8 @@ static int cluster_power_cb(struct notifier_block *nb,
 						return NOTIFY_BAD;
 					}
 					spin_unlock_irqrestore(&cpu_gov->lock, flags);
+				} else {
+					return NOTIFY_BAD;
 				}
 			}
 		}
