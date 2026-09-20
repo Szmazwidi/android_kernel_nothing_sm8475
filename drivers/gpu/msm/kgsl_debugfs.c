@@ -63,7 +63,7 @@ static int globals_show(struct seq_file *s, void *unused)
 		char flags[6];
 
 		flags[0] = TEST_FLAG(KGSL_MEMDESC_PRIVILEGED, &memdesc->priv) ?  'p' : '-';
-		flags[1] = !(TEST_FLAG(KGSL_MEMFLAGS_GPUREADONLY, &memdesc->priv)) ? 'w' : '-';
+		flags[1] = !(memdesc->flags & KGSL_MEMFLAGS_GPUREADONLY) ? 'w' : '-';
 		flags[2] = kgsl_memdesc_is_secured(memdesc) ?  's' : '-';
 		flags[3] = TEST_FLAG(KGSL_MEMDESC_RANDOM, &memdesc->priv) ?  'r' : '-';
 		flags[4] = TEST_FLAG(KGSL_MEMDESC_UCODE, &memdesc->priv) ? 'u' : '-';
