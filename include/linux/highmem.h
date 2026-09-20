@@ -194,6 +194,28 @@ static inline void kunmap(struct page *page)
 #endif
 }
 
+static inline void *kmap_local_page(struct page *page)
+{
+	return page_address(page);
+}
+
+static inline void *kmap_local_page_prot(struct page *page, pgprot_t prot)
+{
+	return kmap_local_page(page);
+}
+
+static inline void *kmap_local_pfn(unsigned long pfn)
+{
+	return kmap_local_page(pfn_to_page(pfn));
+}
+
+static inline void __kunmap_local(void *addr)
+{
+#ifdef ARCH_HAS_FLUSH_ON_KUNMAP
+	kunmap_flush_on_unmap(addr);
+#endif
+}
+
 static inline void *kmap_atomic(struct page *page)
 {
 	preempt_disable();
@@ -225,6 +247,14 @@ static inline void __kunmap_atomic(void *addr)
 #define kmap_flush_unused()	do {} while(0)
 
 #endif /* CONFIG_HIGHMEM */
+
+#if !defined(CONFIG_HIGHMEM)
+#define kunmap_local(__addr)                                      \
+do {                                                             \
+	BUILD_BUG_ON(__same_type((__addr), struct page *));         \
+	__kunmap_local(__addr);                                     \
+} while (0)
+#endif
 
 #if !defined(CONFIG_KMAP_LOCAL)
 #if defined(CONFIG_HIGHMEM) || defined(CONFIG_X86_32)
