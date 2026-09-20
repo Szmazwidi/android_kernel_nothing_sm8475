@@ -685,6 +685,7 @@ LZ4_FORCE_INLINE U32 LZ4_hash4(U32 sequence, tableType_t const tableType)
     else
         return ((sequence * 2654435761U) >> ((MINMATCH*8)-LZ4_HASHLOG));
 }
+EXPORT_SYMBOL(LZ4_decompress_safe);
 
 LZ4_FORCE_INLINE U32 LZ4_hash5(U64 sequence, tableType_t const tableType)
 {
@@ -1675,6 +1676,7 @@ int LZ4_compress_fast_continue (LZ4_stream_t* LZ4_stream,
         return result;
     }
 }
+EXPORT_SYMBOL(LZ4_compress_fast_continue);
 
 
 /* Hidden debug function, to force-test external dictionary mode */
@@ -2495,6 +2497,7 @@ int LZ4_setStreamDecode (LZ4_streamDecode_t* LZ4_streamDecode, const char* dicti
     lz4sd->extDictSize  = 0;
     return 1;
 }
+EXPORT_SYMBOL(LZ4_setStreamDecode);
 
 /*! LZ4_decoderRingBufferSize() :
  *  when setting a ring buffer for streaming decompression (optional scenario),
@@ -2561,6 +2564,7 @@ int LZ4_decompress_safe_continue (LZ4_streamDecode_t* LZ4_streamDecode, const ch
 
     return result;
 }
+EXPORT_SYMBOL(LZ4_decompress_safe_continue);
 
 LZ4_FORCE_O2 int
 LZ4_decompress_fast_continue (LZ4_streamDecode_t* LZ4_streamDecode,
