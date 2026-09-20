@@ -276,8 +276,10 @@ static void gsx_gesture_pair_tap(struct gesture_module *gsx)
 	    abs(dx) <= GESTURE_DOUBLE_TAP_MAX_DELTA_X &&
 	    abs(dy) <= GESTURE_DOUBLE_TAP_MAX_DELTA_Y) {
 		ts_info("get DOUBLE-TAP gesture");
-		cd->double_tap_pressed = 1;
-		sysfs_notify(&cd->pdev->dev.kobj, NULL, "double_tap");
+		input_report_key(cd->input_dev, KEY_WAKEUP, 1);
+		input_sync(cd->input_dev);
+		input_report_key(cd->input_dev, KEY_WAKEUP, 0);
+		input_sync(cd->input_dev);
 		gsx->last_tap_ms = 0;
 		return;
 	}
@@ -340,12 +342,12 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 	case GOODIX_GESTURE_DOUBLE_TAP:
 		if (cd->gesture_type & GESTURE_DOUBLE_TAP) {
 			ts_info("get DOUBLE-TAP gesture");
-                        core->double_tap_pressed = 1;
-                        sysfs_notify(&cd->pdev->dev.kobj, NULL, "double_tap");
+			input_report_key(cd->input_dev, KEY_WAKEUP, 1);
+			input_sync(cd->input_dev);
+			input_report_key(cd->input_dev, KEY_WAKEUP, 0);
+			input_sync(cd->input_dev);
 		} else {
 			ts_debug("not enable DOUBLE-TAP");
-                        core->double_tap_pressed = 0;
-                        sysfs_notify(&cd->pdev->dev.kobj, NULL, "double_tap");
 		}
 		break;
 	case GOODIX_GESTURE_FOD_DOWN:
