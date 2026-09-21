@@ -1,47 +1,47 @@
 # Nothing Phone (2) / Pong — Linux 5.10.270 — Baseline
 
-Źródła kernela dla projektu Android 17 / LineageOS 24.0.
-Changelog uporządkowany 21.09.2026. Stan kodu przed dokumentacją: `d9b84e9900f957c94156f190859dde4593e4308f`.
+Kernel sources for the Android 17 / LineageOS 24.0 project.
+Changelog organized on 2026-09-21. Code revision before documentation changes: `d9b84e9900f957c94156f190859dde4593e4308f`.
 
-## Gałęzie repozytorium
+## Repository branches
 
-| Gałąź | Przeznaczenie |
+| Branch | Purpose |
 | --- | --- |
-| [`lineage-24.0`](../../tree/lineage-24.0) | Dotychczasowa baza forka; zachowana bez zmian podczas porządkowania. Zawiera już lokalne poprawki Ponga, nie jest deklarowana jako czysty upstream LineageOS. |
-| [`pong-a17-5.10.270-baseline`](../../tree/pong-a17-5.10.270-baseline) | Punkt odniesienia: Linux 5.10.270, integracja Android Common i wcześniejsze poprawki PM/UFS. |
-| [`pong-a17-5.10.270-experimental`](../../tree/pong-a17-5.10.270-experimental) | Baseline oraz skumulowane eksperymentalne poprawki i backporty. |
+| [`lineage-24.0`](https://github.com/Szmazwidi/android_kernel_nothing_sm8475/tree/lineage-24.0) | Existing fork baseline, preserved during cleanup. Already includes local Pong fixes; this is not an unmodified LineageOS upstream tree. |
+| [`pong-a17-5.10.270-baseline`](https://github.com/Szmazwidi/android_kernel_nothing_sm8475/tree/pong-a17-5.10.270-baseline) | Reference branch: Linux 5.10.270, Android Common integration and earlier PM/UFS fixes. |
+| [`pong-a17-5.10.270-experimental`](https://github.com/Szmazwidi/android_kernel_nothing_sm8475/tree/pong-a17-5.10.270-experimental) | Baseline plus accumulated experimental fixes and backports. |
 
-## Changelog bazowy — względem `lineage-24.0`
+## Baseline changelog — compared with `lineage-24.0`
 
-### Linux i Android Common
+### Linux and Android Common
 
-- Aktualizacja bazy z 5.10.257 do **5.10.270**, przez integrację Android Common 5.10.269 i wydania Linux stable 5.10.270.
-- Włączenie zmian upstream dotyczących m.in. pamięci, systemów plików, sieci, Bluetooth i obsługi błędów. Nie wszystkie dotyczą sprzętu Ponga.
-- Adaptacje integracji do istniejących interfejsów Androida i Qualcomma: m.in. MHI, platform shutdown, TCP oraz sprawdzanie długości pakietów QRTR.
+- Updated the kernel from 5.10.257 to **5.10.270**, integrating Android Common 5.10.269 followed by Linux stable 5.10.270.
+- Included upstream fixes for memory management, filesystems, networking, Bluetooth and error handling. Not all changes apply to Pong hardware.
+- Adapted the integration to existing Android and Qualcomm interfaces, including MHI, platform shutdown, TCP and QRTR packet length validation.
 
-### Pamięć masowa i usypianie
+### Storage and suspend/resume
 
-- Poprawki współpracy SCSI/UFS power management z obsługą błędów, w tym usunięcie zakleszczenia między PM a SCSI error handler.
-- Śledzenie systemowego suspend/resume oraz poprawki przełączania trybu zasilania i timeoutów START STOP UNIT.
-- UFS multi-clear: czyszczenie wielu poleceń oraz usunięcie wyścigu między przerwaniem a resetem kontrolera.
-- Dostosowanie multi-clear do lokalnego modelu blokowania (`hba->host->host_lock`) i atomowego kończenia żądań.
-- Zachowanie wcześniejszych zmian Ponga, w tym sekwencji zasilania CNSS2/QCA6490 i poprawki inicjalizacji tabeli częstotliwości termicznych.
+- Fixed interactions between SCSI/UFS power management and error recovery, including a deadlock between PM and the SCSI error handler.
+- Added system suspend/resume tracking and fixes for power mode transitions and START STOP UNIT timeouts.
+- Added UFS multi-clear support and fixed a race between interrupt handling and controller reset.
+- Adapted multi-clear to local locking (`hba->host->host_lock`) and atomic request completion.
+- Preserved earlier Pong changes, including CNSS2/QCA6490 power sequencing and thermal frequency table initialization.
 
-Baseline jest punktem porównawczym projektu, nie samym czystym tagiem Linux 5.10.270.
+This baseline is the project's reference point, not an unmodified Linux 5.10.270 tag.
 
-## Walidacja i ograniczenia
+## Validation and limitations
 
-- Wcześniejszy stos SCSI/UFS PM był testowany na Pongu: w opisanym oknie 98 udanych wejść w suspend, bez zaobserwowanych błędów resume i UFS/SCSI. Nie był to test wymuszonych timeoutów ani wszystkich ścieżek awaryjnych.
-- Ten wynik dotyczy wcześniejszego etapu stosu; nie należy przypisywać go automatycznie każdemu późniejszemu commitowi ani całej gałęzi eksperymentalnej.
-- Podczas tego porządkowania zweryfikowano historię i zmiany dokumentacji; nie wykonywano nowego buildu ani testu urządzenia. Nazwa baseline nie stanowi deklaracji pełnej walidacji sprzętowej.
+- The earlier SCSI/UFS PM stack was tested on Pong: 98 successful suspend entries in the reported interval, with no observed resume failures or UFS/SCSI errors. This did not test forced timeouts or every recovery path.
+- Those results apply to an earlier integration stage, not automatically to every subsequent commit or the entire experimental branch.
+- Branch cleanup checked history and documentation changes only; no new build or device test was performed. The baseline name does not imply complete hardware validation.
 
-## Pochodzenie zmian
+## Provenance
 
-Historia Linux stable, Android Common, LineageOS i lokalnych zmian pozostaje zachowana.
-Backporty pochodzą m.in. z upstreamu Linux, Qualcomma oraz drzew arter97 i innych
-projektów wymienionych w opisach commitów. Zachowano autorów, źródłowe SHA i opisy
-adaptacji; porządkowanie gałęzi nie squashuje ani nie przepisuje tej historii.
+Linux stable, Android Common, LineageOS and local development history is preserved.
+Backports originate from Linux upstream, Qualcomm, arter97 and other projects
+identified in the commit messages. Authors, source SHAs and adaptation notes are
+retained; branch cleanup does not squash or rewrite that history.
 
-Oryginalne wskazówki dla kontrybutorów Android Common zachowano w
-[`README.android-common.md`](README.android-common.md). Ogólna dokumentacja Linux
-pozostaje w [`README`](README) i katalogu `Documentation/`.
+The original Android Common contribution guidelines are preserved in
+[`README.android-common.md`](README.android-common.md). General Linux documentation
+remains in [`README`](README) and `Documentation/`.
