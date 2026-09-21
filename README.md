@@ -1,109 +1,109 @@
 # Nothing Phone (2) / Pong — Linux 5.10.270 — Experimental
 
-Źródła kernela dla projektu Android 17 / LineageOS 24.0.
-Changelog uporządkowany 21.09.2026. Stan kodu przed dokumentacją: `e457b869750d1dd52995c61b07d7d1418e448b83`.
+Kernel sources for the Android 17 / LineageOS 24.0 project.
+Changelog organized on 2026-09-21. Code revision before documentation changes: `e457b869750d1dd52995c61b07d7d1418e448b83`.
 
-## Gałęzie repozytorium
+## Repository branches
 
-| Gałąź | Przeznaczenie |
+| Branch | Purpose |
 | --- | --- |
-| [`lineage-24.0`](../../tree/lineage-24.0) | Dotychczasowa baza forka; zachowana bez zmian podczas porządkowania. Zawiera już lokalne poprawki Ponga, nie jest deklarowana jako czysty upstream LineageOS. |
-| [`pong-a17-5.10.270-baseline`](../../tree/pong-a17-5.10.270-baseline) | Punkt odniesienia: Linux 5.10.270, integracja Android Common i wcześniejsze poprawki PM/UFS. |
-| [`pong-a17-5.10.270-experimental`](../../tree/pong-a17-5.10.270-experimental) | Baseline oraz skumulowane eksperymentalne poprawki i backporty. |
+| [`lineage-24.0`](https://github.com/Szmazwidi/android_kernel_nothing_sm8475/tree/lineage-24.0) | Existing fork baseline, preserved during cleanup. Already includes local Pong fixes; this is not an unmodified LineageOS upstream tree. |
+| [`pong-a17-5.10.270-baseline`](https://github.com/Szmazwidi/android_kernel_nothing_sm8475/tree/pong-a17-5.10.270-baseline) | Reference branch: Linux 5.10.270, Android Common integration and earlier PM/UFS fixes. |
+| [`pong-a17-5.10.270-experimental`](https://github.com/Szmazwidi/android_kernel_nothing_sm8475/tree/pong-a17-5.10.270-experimental) | Baseline plus accumulated experimental fixes and backports. |
 
-## Changelog bazowy — względem `lineage-24.0`
+## Baseline changelog — compared with `lineage-24.0`
 
-### Linux i Android Common
+### Linux and Android Common
 
-- Aktualizacja bazy z 5.10.257 do **5.10.270**, przez integrację Android Common 5.10.269 i wydania Linux stable 5.10.270.
-- Włączenie zmian upstream dotyczących m.in. pamięci, systemów plików, sieci, Bluetooth i obsługi błędów. Nie wszystkie dotyczą sprzętu Ponga.
-- Adaptacje integracji do istniejących interfejsów Androida i Qualcomma: m.in. MHI, platform shutdown, TCP oraz sprawdzanie długości pakietów QRTR.
+- Updated the kernel from 5.10.257 to **5.10.270**, integrating Android Common 5.10.269 followed by Linux stable 5.10.270.
+- Included upstream fixes for memory management, filesystems, networking, Bluetooth and error handling. Not all changes apply to Pong hardware.
+- Adapted the integration to existing Android and Qualcomm interfaces, including MHI, platform shutdown, TCP and QRTR packet length validation.
 
-### Pamięć masowa i usypianie
+### Storage and suspend/resume
 
-- Poprawki współpracy SCSI/UFS power management z obsługą błędów, w tym usunięcie zakleszczenia między PM a SCSI error handler.
-- Śledzenie systemowego suspend/resume oraz poprawki przełączania trybu zasilania i timeoutów START STOP UNIT.
-- UFS multi-clear: czyszczenie wielu poleceń oraz usunięcie wyścigu między przerwaniem a resetem kontrolera.
-- Dostosowanie multi-clear do lokalnego modelu blokowania (`hba->host->host_lock`) i atomowego kończenia żądań.
-- Zachowanie wcześniejszych zmian Ponga, w tym sekwencji zasilania CNSS2/QCA6490 i poprawki inicjalizacji tabeli częstotliwości termicznych.
+- Fixed interactions between SCSI/UFS power management and error recovery, including a deadlock between PM and the SCSI error handler.
+- Added system suspend/resume tracking and fixes for power mode transitions and START STOP UNIT timeouts.
+- Added UFS multi-clear support and fixed a race between interrupt handling and controller reset.
+- Adapted multi-clear to local locking (`hba->host->host_lock`) and atomic request completion.
+- Preserved earlier Pong changes, including CNSS2/QCA6490 power sequencing and thermal frequency table initialization.
 
-Baseline jest punktem porównawczym projektu, nie samym czystym tagiem Linux 5.10.270.
+This baseline is the project's reference point, not an unmodified Linux 5.10.270 tag.
 
-## Changelog eksperymentalny — dodatkowo względem baseline
+## Experimental changelog — additions to baseline
 
-### Pamięć, zRAM i kompresja
+### Memory, zRAM and compression
 
-- Aktualizacja biblioteki **LZ4 do 1.10.0**, wraz z adaptacją API i eksportami dla modułowego backendu zRAM.
-- Backport nowszych implementacji **zsmalloc i zRAM**: zmiany blokowania i mapowania obiektów, osobne backendy kompresji, parametry algorytmów, obsługa słowników i priorytetów rekompresji.
-- W konfiguracji Ponga włączony backend LZ4 i LZ4 jako domyślny algorytm zRAM. Ustawienia startowe Androida mogą wybrać inny algorytm; faktyczny stan należy sprawdzić na urządzeniu.
-- Eksperymentalny **Kcompressd**: przenoszenie kwalifikującej się pracy swap z kswapd do workera, ograniczona kolejka oraz obsługa referencji stron, zatrzymywania workera i ścieżki awaryjnej. Włączony w konfiguracji Ponga.
-- Dostosowanie przechowywania FIFO Kcompressd do Linux 5.10, z zachowaniem późniejszej lokalnej poprawki.
-- Przebudowa synchronicznego swap I/O: pomocnicze funkcje odczytu/zapisu, bio na stosie dla odczytu synchronicznego, usunięcie starego `rw_page`, adaptacja mpage i zswap oraz domknięcie cyklu życia bio.
-- Oznaczenie synchronicznego I/O zRAM wykorzystywane przez swapon i kwalifikację do Kcompressd.
-- Usprawnienia iterowania po wektorach bio i pomocniczych operacji kopiowania.
+- Updated **LZ4 to 1.10.0**, with kernel API adaptations and exports for the modular zRAM backend.
+- Backported newer **zsmalloc and zRAM** implementations: locking and object mapping changes, dedicated compression backends, algorithm parameters, dictionaries and recompression priorities.
+- Enabled the LZ4 backend and selected LZ4 as the default zRAM algorithm in the Pong configuration. Android startup settings may override this; check the active algorithm on the device.
+- Added experimental **Kcompressd** to offload eligible swap work from kswapd to a worker, with a bounded queue, page reference management, worker shutdown and fallback handling. Enabled in the Pong configuration.
+- Adapted Kcompressd FIFO storage to Linux 5.10, preserving the subsequent local fix.
+- Reworked synchronous swap I/O: read/write helpers, on-stack bio for synchronous reads, removal of the old `rw_page` API, mpage and zswap adaptations, and complete bio resource cleanup.
+- Marked synchronous zRAM I/O for detection by swapon and Kcompressd eligibility checks.
+- Improved bio vector iteration and copying helpers.
 
-### GPU i synchronizacja
+### GPU and synchronization
 
-- KGSL: bezpieczniejsze indeksowanie tablic GMU, sprawdzanie rozmiaru danych ioctl i atomowy stan deskryptorów pamięci.
-- Poprawka raportowania GPUREADONLY w debugfs oraz pomylenia typów w ścieżce LPAC.
-- Użycie sortowania kernela podczas łączenia dma-fence.
+- KGSL: safer GMU array indexing, ioctl data size validation and atomic memory descriptor state.
+- Fixed GPUREADONLY reporting in debugfs and type confusion in the LPAC path.
+- Used the kernel sorting implementation when merging dma-fences.
 
 ### FastRPC / DSP
 
-- Walidacja zakresów stron przekazywanych do DSP i poprawka użycia zwolnionej pamięci w asynchronicznych licznikach wydajności.
-- Oddzielna obsługa nakładających się buforów ION i non-ION; lokalna adaptacja klasyfikacji deskryptorów uwzględnia również fd 0.
+- Validated page ranges passed to the DSP and fixed a use-after-free in asynchronous performance counters.
+- Separated overlap handling for ION and non-ION buffers; the local descriptor classification adaptation also handles fd 0.
 
-### Sieć
+### Networking
 
-- **BBRv3** wraz z wymaganymi zmianami próbkowania TCP, ECN, retransmisji i TSO oraz obsługą PLB.
-- BBR jest dostępne jako algorytm `bbr`; **domyślnie pozostaje CUBIC**, a PLB domyślnie wyłączone.
-- Zachowanie opcjonalności nowego callbacku dla programów BPF TCP struct_ops.
-- CNSS2: awaryjny timer restartu w ścieżce odzyskiwania działania. Nie zastępuje wcześniejszej poprawki zasilania Wi-Fi.
+- Added **BBRv3** with its TCP sampling, ECN, retransmission and TSO dependencies, plus PLB support.
+- BBR is available as `bbr`; **CUBIC remains the default**, and PLB is disabled by default.
+- Kept the new callback optional for BPF TCP struct_ops programs.
+- CNSS2: added a failsafe reboot timer to the recovery path. This preserves the earlier Wi-Fi power sequencing fix.
 
-### Zasilanie, USB i urządzenia wejściowe
+### Power management, USB and input
 
-- Blokowanie współdzielonego stanu w governorach Qualcomm LPM/cluster LPM; dodatkowa walidacja wyboru stanu cluster idle.
-- Obsługa nieoczekiwanych przerwań zakończenia RPMh i poprawka licznika warm reset PMIC.
-- USB: poprawki zakleszczenia podczas wybudzania DWC3, kontroli wskaźników przy suspend, unieważniania TD xHCI i ponawiania konfiguracji MIDI.
-- Goodix: obsługa gestu podwójnego dotknięcia z lokalną adaptacją zachowującą dotychczasowe gesty wybudzania; ograniczenie nadmiernego logowania dotyku i haptyki.
-- GENI I2C: bariery pamięci po zapisach rejestrów i poprawna obsługa nieoczekiwanych przerwań.
+- Added shared-state locking in Qualcomm LPM/cluster LPM governors and further validation of cluster idle state selection.
+- Handled spurious RPMh completion interrupts and corrected PMIC warm reset counting.
+- USB: fixed a DWC3 wakeup deadlock, checked pointers during suspend, corrected xHCI TD invalidation and fixed MIDI bind retries.
+- Goodix: added double-tap gesture support with a local adaptation preserving existing wake gestures; reduced verbose touch and haptics logging.
+- GENI I2C: added memory barriers after register writes and corrected handling of spurious interrupts.
 
-### Pozostałe poprawki
+### Other fixes
 
-- Ochrona statystyk UFS przed dzieleniem przez zero.
-- Zmiana blokady statystyk UID na rt_mutex i dodanie wykrywania kontencji rwlock.
-- Tablica haszująca do globalnego wyszukiwania zegarów oraz wymagane adaptacje pomocniczych API.
+- Prevented division by zero in UFS statistics.
+- Converted the UID statistics lock to rt_mutex and added rwlock contention detection.
+- Added a hash table for global clock lookups and required helper API adaptations.
 
-## Zależności poza tym repozytorium
+## Dependencies outside this repository
 
-Pełny zestaw źródeł Androida obejmuje także osobne repozytorium
+The complete Android source set also includes the separate repository
 `Szmazwidi/android_kernel_nothing_sm8475-modules`.
-Lokalny zestaw to commit `0a41fca1b13a0baaf42ccaccb08187f5e5c0cf5c`:
+The matching local integration commit is `0a41fca1b13a0baaf42ccaccb08187f5e5c0cf5c`:
 
-- poprawka wyścigu w DSI ISR;
-- Wi-Fi qcacmn: kontrola granic scatterlist oraz HTC/HIF;
-- zabezpieczenie tabeli chainmask i propagacja błędu jej alokacji.
+- DSI ISR race fix;
+- Wi-Fi qcacmn: scatterlist and HTC/HIF bounds checks;
+- chainmask table protection and allocation error propagation.
 
-Te zmiany **nie znajdują się w tym repozytorium kernela**. Porządkowanie jego gałęzi
-nie publikuje automatycznie repozytorium modułów; wskazany SHA identyfikuje lokalny
-zestaw integracyjny, nie gwarantuje jego dostępności na GitHubie.
+These changes **are not contained in this kernel repository**. Cleaning up its
+branches does not publish the modules repository automatically. The SHA identifies
+the local integration state and does not guarantee that it is available on GitHub.
 
-## Walidacja i ograniczenia
+## Validation and limitations
 
-- Najnowsze pakiety BBRv3, Kcompressd i swap/Wi-Fi/fences przeszły przegląd statyczny; pełny build i testy działania tej końcowej kombinacji pozostają do wykonania.
-- Podczas porządkowania gałęzi nie uruchamiano kompilacji ani flashowania.
-- Wcześniejsze testy PM i wcześniejszych paczek nie oznaczają walidacji obecnego HEAD.
-- Do sprawdzenia po przyszłym buildzie: boot, Wi-Fi, presja pamięci, swap/writeback, suspend/resume oraz TCP z CUBIC i BBR.
-- Zmiany struktur TCP oraz API pamięci/I/O wymagają zgodnych modułów. Nie zakładamy zgodności ze starymi modułami binarnymi.
-- Nie ma jeszcze pomiarów potwierdzających wzrost FPS, poprawę czasu pracy na baterii ani zysk z Kcompressd.
+- The latest BBRv3, Kcompressd and swap/Wi-Fi/fences packages have undergone static review; a full build and runtime testing of this final combination remain pending.
+- No compilation or flashing was performed during branch cleanup.
+- Earlier PM and package tests do not validate the current HEAD.
+- Future build validation should cover boot, Wi-Fi, memory pressure, swap/writeback, suspend/resume and TCP with both CUBIC and BBR.
+- TCP structure and memory/I/O API changes require compatible modules. Compatibility with older binary modules is not assumed.
+- No measurements yet establish improved FPS, battery life or a performance benefit from Kcompressd.
 
-## Pochodzenie zmian
+## Provenance
 
-Historia Linux stable, Android Common, LineageOS i lokalnych zmian pozostaje zachowana.
-Backporty pochodzą m.in. z upstreamu Linux, Qualcomma oraz drzew arter97 i innych
-projektów wymienionych w opisach commitów. Zachowano autorów, źródłowe SHA i opisy
-adaptacji; porządkowanie gałęzi nie squashuje ani nie przepisuje tej historii.
+Linux stable, Android Common, LineageOS and local development history is preserved.
+Backports originate from Linux upstream, Qualcomm, arter97 and other projects
+identified in the commit messages. Authors, source SHAs and adaptation notes are
+retained; branch cleanup does not squash or rewrite that history.
 
-Oryginalne wskazówki dla kontrybutorów Android Common zachowano w
-[`README.android-common.md`](README.android-common.md). Ogólna dokumentacja Linux
-pozostaje w [`README`](README) i katalogu `Documentation/`.
+The original Android Common contribution guidelines are preserved in
+[`README.android-common.md`](README.android-common.md). General Linux documentation
+remains in [`README`](README) and `Documentation/`.
