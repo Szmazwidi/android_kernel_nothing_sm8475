@@ -441,6 +441,7 @@ static void swap_writepage_bdev_sync(struct page *page,
 
 	submit_bio_wait(&bio);
 	__end_swap_bio_write(&bio);
+	bio_uninit(&bio);
 }
 
 static void swap_writepage_bdev_async(struct page *page,
@@ -472,7 +473,7 @@ int __swap_writepage(struct page *page, struct writeback_control *wbc)
 	VM_BUG_ON_PAGE(!PageSwapCache(page), page);
 	if (data_race(sis->flags & SWP_FS_OPS))
 		return swap_writepage_fs(page, wbc);
-	else if (sis->flags & SWP_SYNCHRONOUS_IO)
+	else if (data_race(sis->flags) & SWP_SYNCHRONOUS_IO)
 		swap_writepage_bdev_sync(page, wbc, sis);
 	else
 		swap_writepage_bdev_async(page, wbc, sis);
@@ -503,6 +504,7 @@ static void swap_readpage_bdev_sync(struct page *page,
 
 	submit_bio_wait(&bio);
 	__end_swap_bio_read(&bio);
+	bio_uninit(&bio);
 	put_task_struct(current);
 }
 
@@ -510,7 +512,6 @@ static void swap_readpage_bdev_async(struct page *page,
 		struct swap_info_struct *sis)
 {
 	struct bio *bio;
-	struct gendisk *disk;
 
 	bio = bio_alloc(GFP_KERNEL, 1);
 	bio_set_dev(bio, sis->bdev);
@@ -519,11 +520,6 @@ static void swap_readpage_bdev_async(struct page *page,
 	bio->bi_end_io = end_swap_bio_read;
 	bio_add_page(bio, page, thp_size(page), 0);
 
-	disk = bio->bi_disk;
-	/*
-	 * Keep this task valid during swap readpage because the oom killer may
-	 * attempt to access it in the page fault retry time check.
-	 */
 	trace_android_vh_count_pswpin(sis);
 	count_vm_event(PSWPIN);
 	submit_bio(bio);
@@ -558,7 +554,7 @@ int swap_readpage(struct page *page, bool synchronous)
 			trace_android_vh_count_pswpin(sis);
 			count_vm_event(PSWPIN);
 		}
-	} else if (synchronous || (sis->flags & SWP_SYNCHRONOUS_IO)) {
+	} else if (synchronous || (data_race(sis->flags) & SWP_SYNCHRONOUS_IO)) {
 		swap_readpage_bdev_sync(page, sis);
 	} else {
 		swap_readpage_bdev_async(page, sis);
