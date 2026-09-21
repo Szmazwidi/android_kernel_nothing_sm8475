@@ -2021,8 +2021,9 @@ static int context_build_overlap(struct smq_invoke_ctx *ctx)
 	max_ion.raix = -1;
 	for (i = 0; i < nbufs; ++i) {
 		int raix = ctx->overps[i]->raix;
-		/* Separate ION and non-ION buffers; fd <= 0 indicates non-ION */
-		max = (ctx->fds && ctx->fds[raix] > 0) ? &max_ion : &max_nonion;
+		/* Match get_args(): -1 means no DMA-BUF; fd 0 is valid. */
+		max = (ctx->fds && ctx->fds[raix] != -1) ?
+			&max_ion : &max_nonion;
 		if (ctx->overps[i]->start < max->end) {
 			ctx->overps[i]->mstart = max->end;
 			ctx->overps[i]->mend = ctx->overps[i]->end;
