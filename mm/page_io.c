@@ -11,6 +11,8 @@
  *  Always use brw_page, life becomes simpler. 12 May 1998 Eric Biederman
  */
 
+#include <linux/kfifo.h>
+#include <linux/slab.h>
 #include <linux/mm.h>
 #include <linux/kernel_stat.h>
 #include <linux/gfp.h>
@@ -213,10 +215,10 @@ static bool swap_sched_async_compress(struct page *page)
 
 	/* Multiple kswapd threads may enqueue pages for the same node. */
 	spin_lock_irqsave(&pgdat->kcompress_lock, flags);
-	if (pgdat->kcompress_accepting &&
-	    kfifo_avail(&pgdat->kcompress_fifo) >= sizeof(page)) {
+	if (pgdat->kcompress_accepting && pgdat->kcompress_fifo &&
+	    kfifo_avail(pgdat->kcompress_fifo) >= sizeof(page)) {
 		get_page(page);
-		kfifo_in(&pgdat->kcompress_fifo, &page, sizeof(page));
+		kfifo_in(pgdat->kcompress_fifo, &page, sizeof(page));
 		queued = true;
 	}
 	spin_unlock_irqrestore(&pgdat->kcompress_lock, flags);
@@ -242,12 +244,12 @@ static int kcompressd(void *arg)
 	current->flags |= PF_SWAPWRITE;
 	for (;;) {
 		wait_event(pgdat->kcompressd_wait, kthread_should_stop() ||
-			   !kfifo_is_empty(&pgdat->kcompress_fifo));
+			   !kfifo_is_empty(pgdat->kcompress_fifo));
 		for (;;) {
 			unsigned int copied;
 
 			spin_lock_irqsave(&pgdat->kcompress_lock, flags);
-			copied = kfifo_out(&pgdat->kcompress_fifo, &page,
+			copied = kfifo_out(pgdat->kcompress_fifo, &page,
 					   sizeof(page));
 			spin_unlock_irqrestore(&pgdat->kcompress_lock, flags);
 			if (!copied)
@@ -273,15 +275,28 @@ void kcompressd_run(int nid)
 
 	if (pgdat->kcompressd)
 		return;
-	if (kfifo_alloc(&pgdat->kcompress_fifo,
+
+	pgdat->kcompress_fifo = kzalloc(sizeof(*pgdat->kcompress_fifo),
+					GFP_KERNEL);
+	if (!pgdat->kcompress_fifo) {
+		pr_warn("kcompressd%d: FIFO descriptor allocation failed; using sync swap\n",
+			nid);
+		return;
+	}
+
+	if (kfifo_alloc(pgdat->kcompress_fifo,
 		       KCOMPRESS_FIFO_PAGES * sizeof(struct page *), GFP_KERNEL)) {
 		pr_warn("kcompressd%d: queue allocation failed; using sync swap\n", nid);
+		kfree(pgdat->kcompress_fifo);
+		pgdat->kcompress_fifo = NULL;
 		return;
 	}
 	task = kthread_create_on_node(kcompressd, pgdat, nid, "kcompressd%d", nid);
 	if (IS_ERR(task)) {
 		pr_warn("kcompressd%d: worker creation failed (%ld)\n", nid, PTR_ERR(task));
-		kfifo_free(&pgdat->kcompress_fifo);
+		kfifo_free(pgdat->kcompress_fifo);
+		kfree(pgdat->kcompress_fifo);
+		pgdat->kcompress_fifo = NULL;
 		return;
 	}
 	pgdat->kcompressd = task;
@@ -303,7 +318,9 @@ void kcompressd_stop(int nid)
 	spin_unlock_irqrestore(&pgdat->kcompress_lock, flags);
 	kthread_stop(pgdat->kcompressd);
 	pgdat->kcompressd = NULL;
-	kfifo_free(&pgdat->kcompress_fifo);
+	kfifo_free(pgdat->kcompress_fifo);
+	kfree(pgdat->kcompress_fifo);
+	pgdat->kcompress_fifo = NULL;
 }
 #else
 static bool swap_sched_async_compress(struct page *page)
