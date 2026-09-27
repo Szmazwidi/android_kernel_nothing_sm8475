@@ -3665,9 +3665,14 @@ static ssize_t scenario_fcc_store(struct class *c, struct class_attribute *attr,
 	pr_info("%s: %s val:%d", __func__, current->comm, val);
 
 	if (IS_NON_SYSTEM_PROCESS()) {
-		// Requested manually from the user
+		/* -1 resets the manually requested user limit. */
+		if (val < -1)
+			return -ERANGE;
 		fcc_user_limit_ma = val;
 	} else {
+		/* This path used an unsigned parser before the FCC rework. */
+		if (val < 0)
+			return -ERANGE;
 		fcc_system_limit_ma = val;
 	}
 
@@ -4056,28 +4061,32 @@ static ssize_t charging_en_show(struct class *c, struct class_attribute *attr,
 						battery_class);
 	struct psy_state *pst_usb = &bcdev->psy_list[PSY_TYPE_USB];
 	struct psy_state *pst_wls = &bcdev->psy_list[PSY_TYPE_WLS];
-	bool usb_enabled = false, wls_enabled = false;
+	bool usb_enabled, wls_enabled = false;
+	bool charging_enabled;
 	int rc;
 
 	rc = read_property_id(bcdev, pst_usb, USB_CHARGE_ENABLE);
 	if (rc < 0)
 		return rc;
+
 	usb_enabled = !!pst_usb->prop[USB_CHARGE_ENABLE];
+	charging_enabled = usb_enabled;
 
 	if (!bcdev->wls_not_supported) {
 		rc = read_property_id(bcdev, pst_wls, WLS_EN);
 		if (rc < 0)
 			return rc;
+
 		wls_enabled = !!pst_wls->prop[WLS_EN];
+
+		if (usb_enabled != wls_enabled)
+			pr_warn("Inconsistent charging states: USB=%d, WLS=%d\n",
+				usb_enabled, wls_enabled);
+
+		charging_enabled = usb_enabled && wls_enabled;
 	}
 
-	if (usb_enabled != wls_enabled && !bcdev->wls_not_supported)
-		pr_warn("Inconsistent charging states: USB=%d, WLS=%d
-",
-			usb_enabled, wls_enabled);
-
-	return scnprintf(buf, PAGE_SIZE, "%d
-", usb_enabled);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", charging_enabled);
 }
 
 static ssize_t charging_en_store(struct class *c,
@@ -4086,39 +4095,63 @@ static ssize_t charging_en_store(struct class *c,
 {
 	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
 						battery_class);
-	int rc;
+	struct psy_state *pst_usb = &bcdev->psy_list[PSY_TYPE_USB];
+	struct psy_state *pst_wls = &bcdev->psy_list[PSY_TYPE_WLS];
+	bool old_usb_enabled, old_wls_enabled = false;
 	bool val;
+	int rc, rollback_rc;
 
 	if (kstrtobool(buf, &val))
 		return -EINVAL;
 
-	rc = write_property_id(bcdev, &bcdev->psy_list[PSY_TYPE_USB],
-				USB_CHARGE_ENABLE, val);
+	rc = read_property_id(bcdev, pst_usb, USB_CHARGE_ENABLE);
+	if (rc < 0)
+		return rc;
+
+	old_usb_enabled = !!pst_usb->prop[USB_CHARGE_ENABLE];
+
+	if (!bcdev->wls_not_supported) {
+		rc = read_property_id(bcdev, pst_wls, WLS_EN);
+		if (rc < 0)
+			return rc;
+
+		old_wls_enabled = !!pst_wls->prop[WLS_EN];
+	}
+
+	rc = write_property_id(bcdev, pst_usb, USB_CHARGE_ENABLE, val);
 	if (rc < 0) {
-		pr_err("Failed to %s USB charging, rc=%d
-",
+		pr_err("Failed to %s USB charging, rc=%d\n",
 			val ? "enable" : "disable", rc);
 		return rc;
 	}
 
 	if (!bcdev->wls_not_supported) {
-		rc = write_property_id(bcdev, &bcdev->psy_list[PSY_TYPE_WLS],
-					WLS_EN, val);
+		rc = write_property_id(bcdev, pst_wls, WLS_EN, val);
 		if (rc < 0) {
-			pr_err("Failed to %s wireless charging, rc=%d
-",
+			pr_err("Failed to %s wireless charging, rc=%d\n",
 				val ? "enable" : "disable", rc);
 
-			write_property_id(bcdev,
-				&bcdev->psy_list[PSY_TYPE_USB],
-				USB_CHARGE_ENABLE, !val);
+			rollback_rc = write_property_id(bcdev, pst_usb,
+						USB_CHARGE_ENABLE,
+						old_usb_enabled);
+			if (rollback_rc < 0)
+				pr_err("Failed to restore USB charging state, rc=%d\n",
+					rollback_rc);
+
+			rollback_rc = write_property_id(bcdev, pst_wls,
+						WLS_EN,
+						old_wls_enabled);
+			if (rollback_rc < 0)
+				pr_err("Failed to restore wireless charging state, rc=%d\n",
+					rollback_rc);
+
 			return rc;
 		}
 	}
 
-	pr_info("Charging %s for both USB and wireless
-",
-		val ? "enabled" : "disabled");
+	pr_info("Charging %s for USB%s\n",
+		val ? "enabled" : "disabled",
+		bcdev->wls_not_supported ? "" : " and wireless");
 
 	return count;
 }
