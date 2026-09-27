@@ -94,9 +94,7 @@ static int parse_dt_gpio(struct device *dev, struct aw_haptic *aw_haptic,
 // Wrapper for custom_gain
 static void __set_gain(struct aw_haptic *aw_haptic, uint8_t gain)
 {
-	if (aw_haptic->custom_gain)
-		aw_info("custom_gain(%u) is enabled, skipping setting gain %u...", aw_haptic->custom_gain, gain);
-	else
+	if (!aw_haptic->custom_gain)
 		aw_haptic->func->set_gain(aw_haptic, gain);
 }
 
@@ -2160,10 +2158,16 @@ static ssize_t custom_gain_store(struct device *dev, struct device_attribute *at
 	rc = kstrtouint(buf, 0, &val);
 	if (rc < 0)
 		return rc;
+	if (val > 255)
+		return -ERANGE;
+
 	aw_info("value=0x%02x", val);
 	mutex_lock(&aw_haptic->lock);
 	aw_haptic->custom_gain = val;
-	aw_haptic->func->set_gain(aw_haptic, aw_haptic->custom_gain);
+	if (aw_haptic->custom_gain)
+		aw_haptic->func->set_gain(aw_haptic, aw_haptic->custom_gain);
+	else
+		aw_haptic->func->set_gain(aw_haptic, aw_haptic->gain);
 	mutex_unlock(&aw_haptic->lock);
 	return count;
 }
